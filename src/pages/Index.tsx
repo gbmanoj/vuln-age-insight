@@ -20,14 +20,19 @@ import {
   Eye,
   Settings,
   FileText,
-  ChevronRight
+  ChevronRight,
+  Download
 } from 'lucide-react';
 import { RiskDashboard } from '@/components/RiskDashboard';
 import { VulnerabilityTable } from '@/components/VulnerabilityTable';
 import { VulnerabilityChart } from '@/components/VulnerabilityChart';
-import { FileUpload } from '@/components/FileUpload';
+import { NessusUpload } from '@/components/NessusUpload';
+import { VulnerabilitySummary } from '@/components/VulnerabilitySummary';
+import { ReportExport } from '@/components/ReportExport';
+import { AgingMetrics } from '@/components/AgingMetrics';
 import { Link } from 'react-router-dom';
 import { Vulnerability, RiskMetrics, SLAConfig } from '@/types/vulnerability';
+import { NessusScanResult, NessusParser } from '@/utils/nessusParser';
 
 // Mock data
 const mockVulnerabilities: Vulnerability[] = [
@@ -238,6 +243,20 @@ const mockSLAConfig: SLAConfig = {
 export default function Index() {
   const [uploadingFile, setUploadingFile] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [nessusData, setNessusData] = useState<NessusScanResult | null>(null);
+  const [currentVulns, setCurrentVulns] = useState(mockVulnerabilities);
+
+  const handleNessusScanComplete = (scanResult: NessusScanResult) => {
+    console.log('Nessus scan completed:', scanResult);
+    setNessusData(scanResult);
+    
+    // Convert Nessus data to standard vulnerability format
+    const standardVulns = NessusParser.convertToStandardVulnerabilities(scanResult);
+    setCurrentVulns(standardVulns);
+    
+    // Switch to vulnerabilities tab to show results
+    setActiveTab('vulnerabilities');
+  };
 
   const handleFileUpload = (file: File) => {
     console.log('Uploading file:', file.name);
@@ -250,10 +269,10 @@ export default function Index() {
     }, 3000);
   };
 
-  const criticalVulns = mockVulnerabilities.filter(v => v.severity === 'Critical').length;
-  const highVulns = mockVulnerabilities.filter(v => v.severity === 'High').length;
-  const totalAssets = 156; // Mock data
-  const onlineAssets = 142; // Mock data
+  const criticalVulns = currentVulns.filter(v => v.severity === 'Critical').length;
+  const highVulns = currentVulns.filter(v => v.severity === 'High').length;
+  const totalAssets = nessusData?.hosts.length || 156; // Mock data fallback
+  const onlineAssets = totalAssets - 14; // Mock offline count
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800">
@@ -266,7 +285,7 @@ export default function Index() {
                 <div className="p-2 bg-blue-600 rounded-lg">
                   <Shield className="h-6 w-6 text-white" />
                 </div>
-                <h1 className="text-2xl font-bold text-white">CyberGuard</h1>
+                <h1 className="text-2xl font-bold text-white">CyberGuard Enterprise</h1>
               </div>
               <div className="hidden md:flex items-center space-x-6">
                 <Link 
@@ -311,7 +330,7 @@ export default function Index() {
             Enterprise Vulnerability Management
           </h2>
           <p className="text-xl text-slate-400 mb-8 max-w-3xl mx-auto">
-            Comprehensive security analytics and risk management platform for modern enterprises
+            Advanced Nessus integration with automated parsing, risk assessment, and comprehensive reporting
           </p>
           
           {/* Quick Stats */}
@@ -365,14 +384,28 @@ export default function Index() {
                 className="data-[state=active]:bg-slate-700 data-[state=active]:text-white text-slate-300 px-6 py-3"
               >
                 <Upload className="h-4 w-4 mr-2" />
-                Upload
+                Nessus Upload
+              </TabsTrigger>
+              <TabsTrigger 
+                value="reports" 
+                className="data-[state=active]:bg-slate-700 data-[state=active]:text-white text-slate-300 px-6 py-3"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Export
               </TabsTrigger>
             </TabsList>
           </div>
 
           <TabsContent value="dashboard" className="space-y-6">
+            {nessusData && (
+              <VulnerabilitySummary
+                summary={nessusData.vulnerabilitySummary}
+                hostCount={nessusData.hosts.length}
+                scanDate={nessusData.scanInfo.scanStart}
+              />
+            )}
             <RiskDashboard 
-              vulnerabilities={mockVulnerabilities}
+              vulnerabilities={currentVulns}
               riskMetrics={mockRiskMetrics}
               slaConfig={mockSLAConfig}
             />
@@ -384,13 +417,18 @@ export default function Index() {
                 <CardTitle className="text-white flex items-center">
                   <Shield className="h-5 w-5 mr-2" />
                   Vulnerability Management
+                  {nessusData && (
+                    <Badge className="ml-4 bg-blue-600">
+                      Nessus Scan: {nessusData.scanInfo.scanStart.toLocaleDateString()}
+                    </Badge>
+                  )}
                 </CardTitle>
                 <CardDescription>
                   Comprehensive view of all security vulnerabilities across your infrastructure
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <VulnerabilityTable vulnerabilities={mockVulnerabilities} />
+                <VulnerabilityTable vulnerabilities={currentVulns} />
               </CardContent>
             </Card>
           </TabsContent>
@@ -403,7 +441,7 @@ export default function Index() {
                   <CardDescription>Breakdown by severity levels</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <VulnerabilityChart vulnerabilities={mockVulnerabilities} type="severity" />
+                  <VulnerabilityChart vulnerabilities={currentVulns} type="severity" />
                 </CardContent>
               </Card>
 
@@ -413,37 +451,28 @@ export default function Index() {
                   <CardDescription>Risk assessment based on CVSS scoring</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <VulnerabilityChart vulnerabilities={mockVulnerabilities} type="cvss" />
+                  <VulnerabilityChart vulnerabilities={currentVulns} type="cvss" />
                 </CardContent>
               </Card>
 
               <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm lg:col-span-2">
                 <CardHeader>
-                  <CardTitle className="text-white">Vulnerability Categories</CardTitle>
-                  <CardDescription>Distribution across different vulnerability types</CardDescription>
+                  <CardTitle className="text-white">Vulnerability Aging Metrics</CardTitle>
+                  <CardDescription>Time-based analysis of vulnerability discovery and remediation</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <VulnerabilityChart vulnerabilities={mockVulnerabilities} type="category" />
+                  <AgingMetrics vulnerabilities={currentVulns} />
                 </CardContent>
               </Card>
             </div>
           </TabsContent>
 
           <TabsContent value="upload" className="space-y-6">
-            <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="text-white flex items-center">
-                  <FileText className="h-5 w-5 mr-2" />
-                  Nessus File Upload
-                </CardTitle>
-                <CardDescription>
-                  Upload your .nessus scan files for automated vulnerability analysis
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <FileUpload onFileUpload={handleFileUpload} isLoading={uploadingFile} />
-              </CardContent>
-            </Card>
+            <NessusUpload onScanComplete={handleNessusScanComplete} />
+          </TabsContent>
+
+          <TabsContent value="reports" className="space-y-6">
+            <ReportExport vulnerabilities={currentVulns} scanResult={nessusData} />
           </TabsContent>
         </Tabs>
 
