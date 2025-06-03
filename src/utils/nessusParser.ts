@@ -1,4 +1,3 @@
-
 import { Vulnerability } from '@/types/vulnerability';
 
 export interface NessusHost {
@@ -85,8 +84,8 @@ export class NessusParser {
     
     // Parse scan info
     const policyElement = xmlDoc.querySelector('Policy');
-    const scanStart = this.getElementText(xmlDoc, 'ScanStart');
-    const scanEnd = this.getElementText(xmlDoc, 'ScanEnd');
+    const scanStart = this.getElementText(xmlDoc.documentElement, 'ScanStart');
+    const scanEnd = this.getElementText(xmlDoc.documentElement, 'ScanEnd');
     
     hostElements.forEach(hostElement => {
       const host = this.parseHost(hostElement);
@@ -102,7 +101,7 @@ export class NessusParser {
       scanInfo: {
         scanStart: scanStart ? new Date(parseInt(scanStart) * 1000) : new Date(),
         scanEnd: scanEnd ? new Date(parseInt(scanEnd) * 1000) : new Date(),
-        scannerVersion: this.getElementText(xmlDoc, 'ScannerVersion') || 'Unknown',
+        scannerVersion: this.getElementText(xmlDoc.documentElement, 'ScannerVersion') || 'Unknown',
         policyName: policyElement?.getAttribute('name') || 'Default Policy',
         targetHosts: hosts.map(h => h.ip)
       },
@@ -186,7 +185,7 @@ export class NessusParser {
     return tag?.textContent || null;
   }
 
-  private static getElementText(element: Element, tagName: string): string | null {
+  private static getElementText(element: Element | Document, tagName: string): string | null {
     const tag = element.querySelector(tagName);
     return tag?.textContent || null;
   }
